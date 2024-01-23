@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, fs::File, io::{self, BufRead, BufReader}};
 
 use clap::{App, Arg};
 
@@ -13,7 +13,10 @@ pub struct Config {
 
 pub fn run(config: Config) -> MyResult<()> {
     for filename in config.files {
-        println!("{}", filename);
+        match open(&filename) {
+            Err(err) => eprintln!("Failed to open {}: {}", filename, err),
+            Ok(_) => println!("Opened {}", filename)
+        }
     }
     Ok(())
 }
@@ -32,4 +35,11 @@ pub fn get_args() -> MyResult<Config> {
         number_lines: matches.is_present("number"),
         number_nonblank_lines: matches.is_present("number_nonblank")
     })
+}
+
+fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
+    match filename {
+        "-" => Ok(Box::new(BufReader::new(io::stdin()))),
+        _ => Ok(Box::new(BufReader::new(File::open(filename)?))),
+    }
 }
