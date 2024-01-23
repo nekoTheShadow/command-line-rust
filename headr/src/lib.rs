@@ -13,10 +13,14 @@ pub struct Config {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    for filename in config.files {
+    let num_files = config.files.len();
+    for (file_num, filename) in config.files.iter().enumerate() {
         match open(&filename) {
             Err(err) => eprintln!("{}: {}", filename, err),
             Ok(mut file) => {
+                if num_files > 1 {
+                    println!("{}==> {} <==", if file_num > 0 {"\n"} else {""}, filename);
+                }
                 if let Some(num_bytes) = config.bytes {
                     let mut handle = file.take(num_bytes as u64);
                     let mut buffer = vec![0; num_bytes];
