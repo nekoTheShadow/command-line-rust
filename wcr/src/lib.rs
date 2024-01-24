@@ -28,15 +28,15 @@ pub fn get_args() -> MyResult<Config> {
         .author("Hajime Nakamura <h.nakamura0903@gmail.com>")
         .about("Rust wc")
         .arg(Arg::with_name("files").value_name("FILE").help("Input file(s)").default_value("-").multiple(true))
-        .arg(Arg::with_name("words").short("w").long("word").help("Show word count").takes_value(false))
-        .arg(Arg::with_name("bytes").short("c").long("byte").help("Show byte count").takes_value(false))
-        .arg(Arg::with_name("chars").short("m").long("char").help("Show char count").takes_value(false).conflicts_with("bytes"))
-        .arg(Arg::with_name("lines").short("l").long("line").help("Show line count").takes_value(false))
+        .arg(Arg::with_name("words").short("w").long("words").help("Show word count").takes_value(false))
+        .arg(Arg::with_name("bytes").short("c").long("bytes").help("Show byte count").takes_value(false))
+        .arg(Arg::with_name("chars").short("m").long("chars").help("Show char count").takes_value(false).conflicts_with("bytes"))
+        .arg(Arg::with_name("lines").short("l").long("lines").help("Show line count").takes_value(false))
         .get_matches();
     let mut lines = matches.is_present("lines");
     let mut words = matches.is_present("words");
     let mut bytes = matches.is_present("bytes");
-    let mut chars = matches.is_present("chars");
+    let chars = matches.is_present("chars");
     if [lines, words, bytes, chars].iter().all(|v| v==&false) {
         lines = true;
         words = true;
@@ -52,15 +52,40 @@ pub fn get_args() -> MyResult<Config> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    for filename in config.files {
+    let mut total_lines = 0;
+    let mut total_words = 0;
+    let mut total_bytes = 0;
+    let mut total_chars = 0;
+
+    for filename in &config.files {
         match open(&filename) {
             Err(err) => eprintln!("{}: {}", filename, err),
             Ok(file) => {
                 if let Ok(fileinfo) = count(file) {
-                    dbg!(fileinfo);
+                    println!(
+                        "{}{}{}{}{}", 
+                        format_field(fileinfo.num_lines, config.lines),
+                        format_field(fileinfo.num_words, config.words),
+                        format_field(fileinfo.num_bytes, config.bytes),
+                        format_field(fileinfo.num_chars, config.chars),
+                        if filename=="-" {"".to_string()}else{format!(" {}", filename)}
+                    );
+                    total_lines += fileinfo.num_lines;
+                    total_words += fileinfo.num_words;
+                    total_bytes += fileinfo.num_bytes;
+                    total_chars += fileinfo.num_chars;
                 }
             }
         }
+    }
+
+    if config.files.len() > 1{
+        println!(
+            "{}{}{}{} total", 
+            format_field(total_lines, config.lines),
+            format_field(total_words, config.words),
+            format_field(total_bytes, config.bytes),
+            format_field(total_chars, config.chars));
     }
     Ok(())
 }
@@ -88,6 +113,7 @@ pub fn count(mut file: impl BufRead) -> MyResult<FileInfo> {
         num_lines += 1;
         num_words += line.split_whitespace().count();
         num_chars += line.chars().count();
+        line.clear();
     }
 
 
@@ -99,11 +125,19 @@ pub fn count(mut file: impl BufRead) -> MyResult<FileInfo> {
     })
 }
 
+fn format_field(value: usize, show: bool) -> String {
+    if show {
+        format!("{:>8}", value)
+    } else {
+        "".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
 
-    use crate::{count, FileInfo};
+    use crate::{count, format_field, FileInfo};
 
     #[test]
     fn test_count() {
@@ -117,5 +151,12 @@ mod tests {
             num_bytes: 48,
         };
         assert_eq!(info.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_format_field() {
+        assert_eq!(format_field(1, false), "");
+        assert_eq!(format_field(3, true), "       3");
+        assert_eq!(format_field(10, true), "      10");
     }
 }
