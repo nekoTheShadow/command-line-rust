@@ -55,7 +55,11 @@ pub fn run(config: Config) -> MyResult<()> {
     for filename in config.files {
         match open(&filename) {
             Err(err) => eprintln!("{}: {}", filename, err),
-            Ok(_) => println!("Opened {}", filename),
+            Ok(file) => {
+                if let Ok(fileinfo) = count(file) {
+                    dbg!(fileinfo);
+                }
+            }
         }
     }
     Ok(())
@@ -73,6 +77,20 @@ pub fn count(mut file: impl BufRead) -> MyResult<FileInfo> {
     let mut num_words = 0;
     let mut num_bytes = 0;
     let mut num_chars = 0;
+    let mut line = String::new();
+
+    loop {
+        let line_bytes = file.read_line(&mut line)?;
+        if line_bytes == 0 {
+            break;
+        }
+        num_bytes += line_bytes;
+        num_lines += 1;
+        num_words += line.split_whitespace().count();
+        num_chars += line.chars().count();
+    }
+
+
     Ok(FileInfo{
         num_lines,
         num_words,
