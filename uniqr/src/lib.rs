@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, fmt::format, fs::File, io::{self, BufRead, BufReader}};
 
 use clap::{App, Arg};
 
@@ -12,7 +12,16 @@ pub struct Config {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    dbg!(config);
+    let mut file = open(&config.in_file).map_err(|e| format!("{}: {}", config.in_file, e))?;
+    let mut line = String::new();
+    loop {
+        let bytes = file.read_line(&mut line)?;
+        if bytes == 0 {
+            break;
+        }
+        print!("{}", line);
+        line.clear();
+    }
     Ok(())
 }
 
@@ -30,4 +39,11 @@ pub fn get_args() -> MyResult<Config> {
         out_file: matches.value_of_lossy("out_file").map(String::from),
         count: matches.is_present("count")
     })
+}
+
+fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
+    match filename {
+        "-" => Ok(Box::new(BufReader::new(io::stdin()))),
+        _ => Ok(Box::new(BufReader::new(File::open(filename)?))),
+    }
 }
