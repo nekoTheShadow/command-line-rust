@@ -1,6 +1,7 @@
 use std::{error::Error, fs::File, io::{self, BufRead, BufReader}, num::NonZeroUsize, ops::Range};
 
 use clap::{App, Arg};
+use csv::StringRecord;
 use regex::Regex;
 
 use crate::Extract::*;
@@ -111,10 +112,16 @@ fn extract_bytes(line: &str, byte_pos: &[Range<usize>]) -> String {
     unimplemented!()
 }
 
+fn extract_fields(record: &StringRecord, field_pos: &[Range<usize>]) -> Vec<String> {
+    unimplemented!()
+}
+
 
 #[cfg(test)]
 mod unit_test {
-    use crate::{extract_bytes, extract_chars, parse_pos};
+    use csv::StringRecord;
+
+    use crate::{extract_bytes, extract_chars, extract_fields, parse_pos};
 
 
     #[test]
@@ -223,5 +230,15 @@ mod unit_test {
         assert_eq!(extract_bytes("ábc", &[0..4]), "ábc".to_string());
         assert_eq!(extract_bytes("ábc", &[3..4, 2..3]), "cb".to_string());
         assert_eq!(extract_bytes("ábc", &[0..2, 5..6]), "á".to_string());
+    }
+
+    #[test]
+    fn test_extract_fields() {
+        let rec = StringRecord::from(vec!["Captain", "Sham", "12345"]);
+        assert_eq!(extract_fields(&rec, &[0..1]), &["Captain"]);
+        assert_eq!(extract_fields(&rec, &[1..2]), &["Sham"]);
+        assert_eq!(extract_fields(&rec, &[0..1, 2..3]), &["Captain", "12345"]);
+        assert_eq!(extract_fields(&rec, &[0..1, 3..4]), &["Captain"]);
+        assert_eq!(extract_fields(&rec, &[1..2, 0..1]), &["Sham", "Captain"]);
     }
 }
