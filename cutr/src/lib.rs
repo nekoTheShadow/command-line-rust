@@ -1,4 +1,4 @@
-use std::{error::Error, fs::File, io::{self, BufRead, BufReader}, num::NonZeroUsize, ops::Range};
+use std::{error::Error, fs::File, io::{self, BufRead, BufReader}, num::NonZeroUsize, ops::Range, vec};
 
 use clap::{App, Arg};
 use csv::StringRecord;
@@ -105,7 +105,8 @@ fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
 }
 
 fn extract_chars(line: &str, char_pos: &[Range<usize>]) -> String {
-    unimplemented!()
+    let chars = line.chars().collect::<Vec<_>>();
+    char_pos.iter().cloned().flat_map(|range| range.filter_map(|i| chars.get(i)).copied()).collect()
 }
 
 fn extract_bytes(line: &str, byte_pos: &[Range<usize>]) -> String {
