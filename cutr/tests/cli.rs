@@ -1,21 +1,28 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use rand::{distributions::Alphanumeric, Rng};
-use std::{borrow::Cow, fs, path::Path};
+use std::fs;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-const PRG: &str = "findr";
+const PRG: &str = "cutr";
+const CSV: &str = "tests/inputs/movies1.csv";
+const TSV: &str = "tests/inputs/movies1.tsv";
+const BOOKS: &str = "tests/inputs/books.tsv";
+
+// --------------------------------------------------
+fn random_string() -> String {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(7)
+        .map(char::from)
+        .collect()
+}
 
 // --------------------------------------------------
 fn gen_bad_file() -> String {
     loop {
-        let filename: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(7)
-            .map(char::from)
-            .collect();
-
+        let filename = random_string();
         if fs::metadata(&filename).is_err() {
             return filename;
         }
@@ -24,11 +31,11 @@ fn gen_bad_file() -> String {
 
 // --------------------------------------------------
 #[test]
-fn skips_bad_dir() -> TestResult {
+fn skips_bad_file() -> TestResult {
     let bad = gen_bad_file();
-    let expected = format!("{}: .* [(]os error [23][)]", &bad);
+    let expected = format!("{}: .* [(]os error 2[)]", bad);
     Command::cargo_bin(PRG)?
-        .arg(&bad)
+        .args(&["-f", "1", CSV, &bad, TSV])
         .assert()
         .success()
         .stderr(predicate::str::is_match(expected)?);
@@ -36,22 +43,9 @@ fn skips_bad_dir() -> TestResult {
 }
 
 // --------------------------------------------------
-#[test]
-fn dies_bad_name() -> TestResult {
+fn dies(args: &[&str], expected: &str) -> TestResult {
     Command::cargo_bin(PRG)?
-        .args(&["--name", "*.csv"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("Invalid --name \"*.csv\""));
-    Ok(())
-}
-
-// --------------------------------------------------
-#[test]
-fn dies_bad_type() -> TestResult {
-    let expected = "error: 'x' isn't a valid value for '--type <TYPE>...'";
-    Command::cargo_bin(PRG)?
-        .args(&["--type", "x"])
+        .args(args)
         .assert()
         .failure()
         .stderr(predicate::str::contains(expected));
@@ -59,260 +53,287 @@ fn dies_bad_type() -> TestResult {
 }
 
 // --------------------------------------------------
-#[cfg(windows)]
-fn format_file_name(expected_file: &str) -> Cow<str> {
-    // Equivalent to: Cow::Owned(format!("{}.windows", expected_file))
-    format!("{}.windows", expected_file).into()
+#[test]
+fn dies_not_enough_args() -> TestResult {
+    dies(&[CSV], "Must have --fields, --bytes, or --chars")
 }
 
 // --------------------------------------------------
-#[cfg(not(windows))]
-fn format_file_name(expected_file: &str) -> Cow<str> {
-    // Equivalent to: Cow::Borrowed(expected_file)
-    expected_file.into()
+#[test]
+fn dies_bad_digit_field() -> TestResult {
+    let bad = random_string();
+    dies(
+        &[CSV, "-f", &bad],
+        &format!("illegal list value: \"{}\"", &bad),
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn dies_bad_digit_bytes() -> TestResult {
+    let bad = random_string();
+    dies(
+        &[CSV, "-b", &bad],
+        &format!("illegal list value: \"{}\"", &bad),
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn dies_bad_digit_chars() -> TestResult {
+    let bad = random_string();
+    dies(
+        &[CSV, "-c", &bad],
+        &format!("illegal list value: \"{}\"", &bad),
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn dies_empty_delimiter() -> TestResult {
+    dies(
+        &[CSV, "-f", "1", "-d", ""],
+        "--delim \"\" must be a single byte",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn dies_bad_delimiter() -> TestResult {
+    dies(
+        &[CSV, "-f", "1", "-d", ",,"],
+        "--delim \",,\" must be a single byte",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn dies_chars_bytes_fields() -> TestResult {
+    Command::cargo_bin(PRG)?
+        .args(&[CSV, "-c", "1", "-f", "1", "-b", "1"])
+        .assert()
+        .failure();
+    Ok(())
+}
+
+// --------------------------------------------------
+#[test]
+fn dies_bytes_fields() -> TestResult {
+    Command::cargo_bin(PRG)?
+        .args(&[CSV, "-f", "1", "-b", "1"])
+        .assert()
+        .failure();
+    Ok(())
+}
+
+// --------------------------------------------------
+#[test]
+fn dies_chars_fields() -> TestResult {
+    Command::cargo_bin(PRG)?
+        .args(&[CSV, "-c", "1", "-f", "1"])
+        .assert()
+        .failure();
+    Ok(())
+}
+
+// --------------------------------------------------
+#[test]
+fn dies_chars_bytes() -> TestResult {
+    Command::cargo_bin(PRG)?
+        .args(&[CSV, "-c", "1", "-b", "1"])
+        .assert()
+        .failure();
+    Ok(())
 }
 
 // --------------------------------------------------
 fn run(args: &[&str], expected_file: &str) -> TestResult {
-    let file = format_file_name(expected_file);
-    let contents = fs::read_to_string(file.as_ref())?;
-    let mut expected: Vec<&str> =
-        contents.split("\n").filter(|s| !s.is_empty()).collect();
-    expected.sort();
-
-    let cmd = Command::cargo_bin(PRG)?.args(args).assert().success();
-    let out = cmd.get_output();
-    let stdout = String::from_utf8(out.stdout.clone())?;
-    let mut lines: Vec<&str> =
-        stdout.split("\n").filter(|s| !s.is_empty()).collect();
-    lines.sort();
-
-    assert_eq!(lines, expected);
-
-    Ok(())
-}
-
-// --------------------------------------------------
-#[test]
-fn path1() -> TestResult {
-    run(&["tests/inputs"], "tests/expected/path1.txt")
-}
-
-// --------------------------------------------------
-#[test]
-fn path_a() -> TestResult {
-    run(&["tests/inputs/a"], "tests/expected/path_a.txt")
-}
-
-// --------------------------------------------------
-#[test]
-fn path_a_b() -> TestResult {
-    run(&["tests/inputs/a/b"], "tests/expected/path_a_b.txt")
-}
-
-// --------------------------------------------------
-#[test]
-fn path_d() -> TestResult {
-    run(&["tests/inputs/d"], "tests/expected/path_d.txt")
-}
-
-// --------------------------------------------------
-#[test]
-fn path_a_b_d() -> TestResult {
-    run(
-        &["tests/inputs/a/b", "tests/inputs/d"],
-        "tests/expected/path_a_b_d.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn type_f() -> TestResult {
-    run(&["tests/inputs", "-t", "f"], "tests/expected/type_f.txt")
-}
-
-// --------------------------------------------------
-#[test]
-fn type_f_path_a() -> TestResult {
-    run(
-        &["tests/inputs/a", "-t", "f"],
-        "tests/expected/type_f_path_a.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn type_f_path_a_b() -> TestResult {
-    run(
-        &["tests/inputs/a/b", "--type", "f"],
-        "tests/expected/type_f_path_a_b.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn type_f_path_d() -> TestResult {
-    run(
-        &["tests/inputs/d", "--type", "f"],
-        "tests/expected/type_f_path_d.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn type_f_path_a_b_d() -> TestResult {
-    run(
-        &["tests/inputs/a/b", "tests/inputs/d", "--type", "f"],
-        "tests/expected/type_f_path_a_b_d.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn type_d() -> TestResult {
-    run(&["tests/inputs", "-t", "d"], "tests/expected/type_d.txt")
-}
-
-// --------------------------------------------------
-#[test]
-fn type_d_path_a() -> TestResult {
-    run(
-        &["tests/inputs/a", "-t", "d"],
-        "tests/expected/type_d_path_a.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn type_d_path_a_b() -> TestResult {
-    run(
-        &["tests/inputs/a/b", "--type", "d"],
-        "tests/expected/type_d_path_a_b.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn type_d_path_d() -> TestResult {
-    run(
-        &["tests/inputs/d", "--type", "d"],
-        "tests/expected/type_d_path_d.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn type_d_path_a_b_d() -> TestResult {
-    run(
-        &["tests/inputs/a/b", "tests/inputs/d", "--type", "d"],
-        "tests/expected/type_d_path_a_b_d.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn type_l() -> TestResult {
-    run(&["tests/inputs", "-t", "l"], "tests/expected/type_l.txt")
-}
-
-// --------------------------------------------------
-#[test]
-fn type_f_l() -> TestResult {
-    run(
-        &["tests/inputs", "-t", "l", "f"],
-        "tests/expected/type_f_l.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn name_csv() -> TestResult {
-    run(
-        &["tests/inputs", "-n", ".*[.]csv"],
-        "tests/expected/name_csv.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn name_csv_mp3() -> TestResult {
-    run(
-        &["tests/inputs", "-n", ".*[.]csv", "-n", ".*[.]mp3"],
-        "tests/expected/name_csv_mp3.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn name_txt_path_a_d() -> TestResult {
-    run(
-        &["tests/inputs/a", "tests/inputs/d", "--name", ".*.txt"],
-        "tests/expected/name_txt_path_a_d.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn name_a() -> TestResult {
-    run(&["tests/inputs", "-n", "a"], "tests/expected/name_a.txt")
-}
-
-// --------------------------------------------------
-#[test]
-fn type_f_name_a() -> TestResult {
-    run(
-        &["tests/inputs", "-t", "f", "-n", "a"],
-        "tests/expected/type_f_name_a.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn type_d_name_a() -> TestResult {
-    run(
-        &["tests/inputs", "--type", "d", "--name", "a"],
-        "tests/expected/type_d_name_a.txt",
-    )
-}
-
-// --------------------------------------------------
-#[test]
-fn path_g() -> TestResult {
-    run(&["tests/inputs/g.csv"], "tests/expected/path_g.txt")
-}
-
-// --------------------------------------------------
-#[test]
-#[cfg(not(windows))]
-fn unreadable_dir() -> TestResult {
-    let dirname = "tests/inputs/cant-touch-this";
-    if !Path::new(dirname).exists() {
-        fs::create_dir(dirname)?;
-    }
-
-    //let metadata = fs::metadata(dirname)?;
-    //let mut permissions = metadata.permissions();
-    //permissions.set_mode(0o000);
-
-    std::process::Command::new("chmod")
-        .args(&["000", dirname])
-        .status()
-        .expect("failed");
-
-    let cmd = Command::cargo_bin(PRG)?
-        .arg("tests/inputs")
+    println!("expected {}", &expected_file);
+    let expected = fs::read_to_string(expected_file)?;
+    Command::cargo_bin(PRG)?
+        .args(args)
         .assert()
-        .success();
-    fs::remove_dir(dirname)?;
-
-    let out = cmd.get_output();
-    let stdout = String::from_utf8(out.stdout.clone())?;
-    let lines: Vec<&str> =
-        stdout.split("\n").filter(|s| !s.is_empty()).collect();
-
-    assert_eq!(lines.len(), 17);
-
-    let stderr = String::from_utf8(out.stderr.clone())?;
-    assert!(stderr.contains("cant-touch-this: Permission denied"));
+        .success()
+        .stdout(expected);
     Ok(())
+}
+
+// --------------------------------------------------
+fn run_lossy(args: &[&str], expected_file: &str) -> TestResult {
+    let contents = fs::read(expected_file)?;
+    let expected = String::from_utf8_lossy(&contents);
+    Command::cargo_bin(PRG)?
+        .args(args)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(expected));
+    Ok(())
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_f1() -> TestResult {
+    run(&[TSV, "-f", "1"], "tests/expected/movies1.tsv.f1.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_f2() -> TestResult {
+    run(&[TSV, "-f", "2"], "tests/expected/movies1.tsv.f2.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_f3() -> TestResult {
+    run(&[TSV, "-f", "3"], "tests/expected/movies1.tsv.f3.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_f1_2() -> TestResult {
+    run(&[TSV, "-f", "1-2"], "tests/expected/movies1.tsv.f1-2.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_f2_3() -> TestResult {
+    run(&[TSV, "-f", "2-3"], "tests/expected/movies1.tsv.f2-3.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_f1_3() -> TestResult {
+    run(&[TSV, "-f", "1-3"], "tests/expected/movies1.tsv.f1-3.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn csv_f1() -> TestResult {
+    run(
+        &[CSV, "-f", "1", "-d", ","],
+        "tests/expected/movies1.csv.f1.dcomma.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn csv_f2() -> TestResult {
+    run(
+        &[CSV, "-f", "2", "-d", ","],
+        "tests/expected/movies1.csv.f2.dcomma.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn csv_f3() -> TestResult {
+    run(
+        &[CSV, "-f", "3", "-d", ","],
+        "tests/expected/movies1.csv.f3.dcomma.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn csv_f1_2() -> TestResult {
+    run(
+        &[CSV, "-f", "1-2", "-d", ","],
+        "tests/expected/movies1.csv.f1-2.dcomma.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn csv_f2_3() -> TestResult {
+    run(
+        &[CSV, "-f", "2-3", "-d", ","],
+        "tests/expected/movies1.csv.f2-3.dcomma.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn csv_f1_3() -> TestResult {
+    run(
+        &[CSV, "-f", "1-3", "-d", ","],
+        "tests/expected/movies1.csv.f1-3.dcomma.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_b1() -> TestResult {
+    run(&[TSV, "-b", "1"], "tests/expected/movies1.tsv.b1.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_b2() -> TestResult {
+    run(&[TSV, "-b", "2"], "tests/expected/movies1.tsv.b2.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_b8() -> TestResult {
+    run_lossy(&[TSV, "-b", "8"], "tests/expected/movies1.tsv.b8.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_b1_2() -> TestResult {
+    run(&[TSV, "-b", "1-2"], "tests/expected/movies1.tsv.b1-2.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_b2_3() -> TestResult {
+    run(&[TSV, "-b", "2-3"], "tests/expected/movies1.tsv.b2-3.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_b1_8() -> TestResult {
+    run_lossy(&[TSV, "-b", "1-8"], "tests/expected/movies1.tsv.b1-8.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_c1() -> TestResult {
+    run(&[TSV, "-c", "1"], "tests/expected/movies1.tsv.c1.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_c2() -> TestResult {
+    run(&[TSV, "-c", "2"], "tests/expected/movies1.tsv.c2.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_c8() -> TestResult {
+    run(&[TSV, "-c", "8"], "tests/expected/movies1.tsv.c8.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_c1_2() -> TestResult {
+    run(&[TSV, "-c", "1-2"], "tests/expected/movies1.tsv.c1-2.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_c2_3() -> TestResult {
+    run(&[TSV, "-c", "2-3"], "tests/expected/movies1.tsv.c2-3.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn tsv_c1_8() -> TestResult {
+    run(&[TSV, "-c", "1-8"], "tests/expected/movies1.tsv.c1-8.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn repeated_value() -> TestResult {
+    run(&[BOOKS, "-c", "1,1"], "tests/expected/books.c1,1.out")
 }

@@ -1,7 +1,7 @@
-use std::{error::Error, fs::File, io::{self, BufRead, BufReader}, num::NonZeroUsize, ops::Range, vec};
+use std::{error::Error, fs::File, io::{self, BufRead, BufReader}, num::NonZeroUsize, ops::Range};
 
 use clap::{App, Arg};
-use csv::StringRecord;
+use csv::{ReaderBuilder, StringRecord, WriterBuilder};
 use regex::Regex;
 
 use crate::Extract::*;
@@ -53,14 +53,37 @@ pub fn get_args() -> MyResult<Config> {
         return Err(From::from("Must have --fields, --bytes, or --chars"));
     };
 
-    unimplemented!()
+    Ok(Config {
+        files: matches.values_of_lossy("files").unwrap(),
+        delimiter: *delim_bytes.first().unwrap(),
+        extract,
+    })
 }
 
 pub fn run(config: Config) -> MyResult<()> {
     for filename in &config.files {
         match open(&filename) {
             Err(err) => eprintln!("{}: {}", filename, err),
-            Ok(_) => println!("Opened {}", filename)
+            Ok(file) => match &config.extract {
+                Fields(field_pos) => {
+                    let mut reader = ReaderBuilder::new().delimiter(config.delimiter).has_headers(false).from_reader(file);
+                    let mut wtr = WriterBuilder::new().delimiter(config.delimiter).from_writer(io::stdout());
+                    for record in reader.records() {
+                        let record = record?;
+                        wtr.write_record(extract_fields(&record, field_pos))?;
+                    }
+                }
+                Bytes(byte_pos) => {
+                    for line in file.lines() {
+                        println!("{}", extract_bytes(&line?, byte_pos));
+                    }
+                },
+                Chars(char_pos ) => {
+                    for line in file.lines() {
+                        println!("{}", extract_chars(&line?, char_pos));
+                    }
+                },
+            }
         }
     }
     Ok(())
