@@ -1,6 +1,9 @@
-use std::{error::Error, ops::Range};
+use std::{error::Error, num::NonZeroUsize, ops::Range};
 
-use clap::App;
+use clap::{App, Arg};
+use regex::Regex;
+
+use crate::Extract::*;
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 type PositionList = Vec<Range<usize>>;
@@ -24,7 +27,30 @@ pub fn get_args() -> MyResult<Config> {
         .version("0.1.0")
         .author("Hajime Nakamura <h.nakamura0903@gmail.com>")
         .about("Rust cut")
+        .arg(Arg::with_name("files").value_name("FILE").help("Input file(s)").multiple(true).default_value("-"))
+        .arg(Arg::with_name("delimiter").value_name("DELIMITER").short("d").long("delim").help("Field delimiter").default_value("\t"))
+        .arg(Arg::with_name("fields").value_name("FIELDS").short("f").long("fields").help("Selected fields").conflicts_with_all(&["chars", "bytes"]))
+        .arg(Arg::with_name("bytes").value_name("BYTES").short("b").long("bytes").help("Selected bytes").conflicts_with_all(&["fields", "chars"]))
+        .arg(Arg::with_name("chars").value_name("CHARS").short("c").long("chars").help("Selected characters").conflicts_with_all(&["fields", "bytes"]))
         .get_matches();
+
+    let delimiter = matches.value_of("delimiter").unwrap();
+    let delim_bytes = delimiter.as_bytes();
+    if delim_bytes.len() != 1 {
+        return Err(From::from(format!("--delim \"{}\" must be a single byte", delimiter)))
+    }
+    let fields = matches.value_of("fields").map(parse_pos).transpose()?;
+    let bytes = matches.value_of("bytes").map(parse_pos).transpose()?;
+    let chars = matches.value_of("chars").map(parse_pos).transpose()?;
+    let extract  = if let Some(field_pos) = fields {
+        Fields(field_pos)
+    } else if let Some(byte_pos) = bytes {
+        Bytes(byte_pos)
+    } else if let Some(char_pos) = chars {
+        Chars(char_pos)
+    } else {
+        return Err(From::from("Must have --fields, --bytes, or --chars"));
+    };
 
     unimplemented!()
 }
@@ -35,8 +61,36 @@ pub fn run(config: Config) -> MyResult<()> {
 }
 
 fn parse_pos(range: &str) -> MyResult<PositionList> {
-    unimplemented!()
+    let range_re = Regex::new(r"^(\d+)-(\d+)$").unwrap();
+    range.split(',')
+         .into_iter()
+         .map(|val| {
+             parse_index(val).map(|n| n..n+1).or_else(|e| {
+                 range_re.captures(val).ok_or(e).and_then(|captures| {
+                     let n1 = parse_index(&captures[1])?;
+                     let n2 = parse_index(&captures[2])?;
+                     if n1 >= n2 {
+                         return Err(format!("First number in range ({}) must be lower than second number ({})", n1+1, n2+1));
+                     }
+                     Ok(n1..n2 + 1)
+                 })
+             })
+         })
+         .collect::<Result<_, _>>()
+         .map_err(From::from)
 }
+
+fn parse_index(input: &str) -> Result<usize, String> {
+    let value_error = || format!("illegal list value: \"{}\"", input);
+    input.starts_with("+")
+         .then(|| Err(value_error()))
+         .unwrap_or_else(|| {
+            input.parse::<NonZeroUsize>()
+                 .map(|n| usize::from(n)-1)
+                 .map_err(|_| value_error())
+        })
+}
+
 
 #[cfg(test)]
 mod unit_test {
