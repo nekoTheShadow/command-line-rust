@@ -115,8 +115,8 @@ fn extract_bytes(line: &str, byte_pos: &[Range<usize>]) -> String {
     String::from_utf8_lossy(&selected).into_owned()
 }
 
-fn extract_fields(record: &StringRecord, field_pos: &[Range<usize>]) -> Vec<String> {
-    unimplemented!()
+fn extract_fields<'a>(record: &'a StringRecord, field_pos: &[Range<usize>]) -> Vec<&'a str> {
+    field_pos.iter().cloned().flat_map(|range| range.filter_map(|i| record.get(i))).collect()
 }
 
 
