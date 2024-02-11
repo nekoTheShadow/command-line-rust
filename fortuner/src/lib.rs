@@ -38,7 +38,7 @@ pub fn get_args() -> MyResult<Config> {
 pub fn run(config: Config) -> MyResult<()> {
     let files = find_files(&config.sources)?;
     let fortunes = read_fortunes(&files)?;
-    println!("{:#?}", fortunes.last());
+    println!("{:#?}", pick_fortune(&fortunes, config.seed));
     Ok(())
 }
 
@@ -54,11 +54,15 @@ fn read_fortunes(paths: &[PathBuf]) -> MyResult<Vec<Fortune>> {
     unimplemented!()
 }
 
+fn pick_fortune(fortunes: &[Fortune], seed: Option<u64>) -> Option<String> {
+    unimplemented!()
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{find_files, parse_u64, read_fortunes};
+    use crate::{find_files, parse_u64, pick_fortune, read_fortunes, Fortune};
 
     #[test]
     fn test_parse_u64() {
@@ -127,4 +131,13 @@ mod tests {
         assert_eq!(res.unwrap().len(), 11);
     }
 
+    #[test]
+    fn test_pick_fortune() {
+        let fortunes = &[
+            Fortune {source: "fortunes".to_string(), text: "You cannot achieve the impossible without attempting the absurd.".to_string()},
+            Fortune {source: "fortunes".to_string(), text: "Assumption is the mother of all screw-ups.".to_string()},
+            Fortune {source: "fortunes".to_string(), text: "Neckties strangle clear thinking.".to_string()}
+        ];
+        assert_eq!(pick_fortune(fortunes, Some(1)).unwrap(), "Neckties strangle clear thinking.".to_string());
+    }
 }
