@@ -12,6 +12,12 @@ pub struct Config {
     seed: Option<u64>
 }
 
+#[derive(Debug)]
+pub struct Fortune {
+    source: String,
+    text: String
+}
+
 pub fn get_args() -> MyResult<Config> {
     let matches = App::new("fortuner")
         .version("0.1.0")
@@ -30,8 +36,9 @@ pub fn get_args() -> MyResult<Config> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    let files = find_files(&config.sources);
-    println!("{:#?}", files);
+    let files = find_files(&config.sources)?;
+    let fortunes = read_fortunes(&files)?;
+    println!("{:#?}", fortunes.last());
     Ok(())
 }
 
@@ -43,9 +50,15 @@ fn find_files(paths: &[String]) -> MyResult<Vec<PathBuf>> {
     unimplemented!()
 }
 
+fn read_fortunes(paths: &[PathBuf]) -> MyResult<Vec<Fortune>> {
+    unimplemented!()
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{find_files, parse_u64};
+    use std::path::PathBuf;
+
+    use crate::{find_files, parse_u64, read_fortunes};
 
     #[test]
     fn test_parse_u64() {
@@ -96,6 +109,22 @@ mod tests {
         if let Some(filename) = files.last().unwrap().file_name() {
             assert_eq!(filename.to_string_lossy(), "jokes".to_string())
         }
+    }
+
+    #[test]
+    fn test_read_fortunes() {
+        let res = read_fortunes(&[PathBuf::from("./tests/inputs/jokes")]);
+        assert!(res.is_ok());
+        if let Ok(fortunes) = res {
+            assert_eq!(fortunes.len(), 6);
+            assert_eq!(fortunes.first().unwrap().text, "Q. What do you call a head of lettuce in a shirt and tie?\nA. Collared greens.");
+            assert_eq!(fortunes.last().unwrap().text, "Q: What do you call a deer wearing an eye patch?\n A: A bad idea (bad-eye deer).");
+        }
+
+
+        let res = read_fortunes(&[PathBuf::from("./tests/inputs/jokes"), PathBuf::from("./tests/inputs/quotes")]);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().len(), 11);
     }
 
 }
