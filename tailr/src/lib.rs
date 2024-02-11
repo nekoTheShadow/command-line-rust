@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, fs::File};
 
 use clap::{App, Arg};
 use once_cell::sync::OnceCell;
@@ -39,7 +39,12 @@ pub fn get_args() -> MyResult<Config> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:#?}", config);
+    for filename in config.files.iter() {
+        match File::open(filename) {
+            Ok(_) => println!("Opened {}", filename),
+            Err(e) => eprintln!("{}: {}", filename, e),
+        }
+    }
     Ok(())
 }
 
