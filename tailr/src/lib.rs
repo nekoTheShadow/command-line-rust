@@ -1,9 +1,12 @@
 use std::error::Error;
 
 use clap::App;
-
+use once_cell::sync::OnceCell;
+use regex::Regex;
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
+
+static NUM_RE: OnceCell<Regex> = OnceCell::new();
 
 #[derive(Debug, PartialEq)]
 enum TakeValue {
@@ -34,7 +37,23 @@ pub fn run(config: Config) -> MyResult<()> {
 }
 
 fn parse_num(val: &str) -> MyResult<TakeValue> {
-    unimplemented!()
+    let num_re = NUM_RE.get_or_init(|| Regex::new(r"^([+-])?(\d+)$").unwrap());
+    match num_re.captures(val) {
+        Some(caps) => {
+            let sign = caps.get(1).map_or("-", |m| m.as_str());
+            let num = format!("{}{}", sign, caps.get(2).unwrap().as_str());
+            if let Ok(val) = num.parse() {
+                if sign=="+" && val==0 {
+                    Ok(TakeValue::PlusZero)
+                } else {
+                    Ok(TakeValue::TakeNum(val))
+                } 
+            } else {
+                Err(From::from(val))
+            }
+        },
+        _ => Err(From::from(val))
+    }
 }
 
 #[cfg(test)]
