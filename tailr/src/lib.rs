@@ -41,7 +41,10 @@ pub fn get_args() -> MyResult<Config> {
 pub fn run(config: Config) -> MyResult<()> {
     for filename in config.files.iter() {
         match File::open(filename) {
-            Ok(_) => println!("Opened {}", filename),
+            Ok(_) => {
+                let (total_lines, total_bytes) = count_lines_bytes(filename)?;
+                println!("{} has {} lines and {} bytes", filename, total_lines, total_bytes);
+            },
             Err(e) => eprintln!("{}: {}", filename, e),
         }
     }
@@ -68,9 +71,15 @@ fn parse_num(val: &str) -> MyResult<TakeValue> {
     }
 }
 
+fn count_lines_bytes(filename: &str) -> MyResult<(i64, i64)> {
+    unimplemented!()
+}
+
+
 #[cfg(test)]
 mod tests {
     use crate::parse_num;
+    use crate::count_lines_bytes;
     use crate::TakeValue::*;
 
     
@@ -119,5 +128,16 @@ mod tests {
         let res = parse_num("foo");
         assert!(res.is_err());
         assert_eq!(res.unwrap_err().to_string(), "foo");
+    }
+
+    #[test]
+    fn test_count_lines_bytes() {
+        let res = count_lines_bytes("tests/inputs/one.txt");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), (1, 24));
+
+        let res = count_lines_bytes("tests/inputs/ten.txt");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), (10, 49));
     }
 }
