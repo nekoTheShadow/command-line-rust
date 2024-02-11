@@ -1,7 +1,9 @@
-use std::{error::Error, path::PathBuf};
+use std::{error::Error, ffi::OsStr, fs::{self, File}, io::{BufRead, BufReader}, path::PathBuf};
 
 use clap::{App, Arg};
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use regex::{Regex, RegexBuilder};
+use walkdir::WalkDir;
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -40,29 +42,66 @@ pub fn run(config: Config) -> MyResult<()> {
     let fortunes = read_fortunes(&files)?;
 
     if let Some(pattern) = config.pattern {
-        for fortune in fortunes {
-            
+        let mut prev_source = None;
+        for fortune in fortunes.iter().filter(|fortune| pattern.is_match(&fortune.text)) {
+            if prev_source.as_ref().map_or(true, |s| s != &fortune.source) {
+                eprintln!("({})\n%", fortune.source);
+                prev_source = Some(fortune.source.clone());
+            }
+            println!("{}\n%", fortune.text);
         }
     } else {
-
+        println!("{}", pick_fortune(&fortunes, config.seed).or_else(|| Some("No fortunes found".to_string())).unwrap());
     }
     Ok(())
 }
 
 fn parse_u64(val: &str) -> MyResult<u64> {
-    val.parse().map_err(|_| format!("\"{}\" not a  valid integer", val).into())
+    val.parse().map_err(|_| format!("\"{}\" not a valid integer", val).into())
 }
 
 fn find_files(paths: &[String]) -> MyResult<Vec<PathBuf>> {
-    unimplemented!()
+    let dat = OsStr::new("dat");
+    let mut files = vec![];
+    for path in paths {
+        match fs::metadata(path) {
+            Ok(_) => files.extend(WalkDir::new(path).into_iter().filter_map(Result::ok).filter(|e| e.file_type().is_file() && e.path().extension() != Some(dat)).map(|e| e.path().into())),
+            Err(e) => return Err(format!("{}: {}", path, e).into()),
+        }
+    }
+    files.sort();
+    files.dedup();
+    Ok(files)
 }
 
 fn read_fortunes(paths: &[PathBuf]) -> MyResult<Vec<Fortune>> {
-    unimplemented!()
+    let mut fortunes = vec![];
+    let mut buffer = vec![];
+    for path in paths {
+        let basename = path.file_name().unwrap().to_string_lossy().into_owned();
+        let file = File::open(path).map_err(|e| format!("{}: {}", path.to_string_lossy().into_owned(), e))?;
+        for line in BufReader::new(file).lines().filter_map(Result::ok) {
+            if line == "%" {
+                if !buffer.is_empty() {
+                    fortunes.push(Fortune { source: basename.clone(), text: buffer.join("\n") })
+                } 
+                buffer.clear();
+            } else {
+                buffer.push(line.to_string());
+            }
+        }
+    }
+    Ok(fortunes)
 }
 
 fn pick_fortune(fortunes: &[Fortune], seed: Option<u64>) -> Option<String> {
-    unimplemented!()
+    if let Some(val) = seed {
+        let mut rng = StdRng::seed_from_u64(val);
+        fortunes.choose(&mut rng).map(|f| f.text.to_string())
+    } else {
+        let mut rng = rand::thread_rng();
+        fortunes.choose(&mut rng).map(|f| f.text.to_string())
+    }
 }
 
 #[cfg(test)]
@@ -129,7 +168,7 @@ mod tests {
         if let Ok(fortunes) = res {
             assert_eq!(fortunes.len(), 6);
             assert_eq!(fortunes.first().unwrap().text, "Q. What do you call a head of lettuce in a shirt and tie?\nA. Collared greens.");
-            assert_eq!(fortunes.last().unwrap().text, "Q: What do you call a deer wearing an eye patch?\n A: A bad idea (bad-eye deer).");
+            assert_eq!(fortunes.last().unwrap().text, "Q: What do you call a deer wearing an eye patch?\nA: A bad idea (bad-eye deer).");
         }
 
 
