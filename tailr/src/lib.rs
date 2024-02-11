@@ -92,8 +92,24 @@ fn print_lines(mut file: impl BufRead, num_lines: &TakeValue, total_lines: i64) 
     unimplemented!()
 }
 
-fn get_start_index(tak_val: &TakeValue, total: i64) -> Option<u64> {
-    unimplemented!()
+fn get_start_index(take_val: &TakeValue, total: i64) -> Option<u64> {
+    match take_val {
+        TakeValue::PlusZero => {
+            if total > 0 {
+                Some(0)
+            } else {
+                None
+            }
+        },
+        TakeValue::TakeNum(num) => {
+            if num==&0 || total==0 || num>&total {
+                None
+            } else {
+                let start = if num<&0 { total+num } else { num-1 };
+                Some(if start < 0 { 0 } else { start as u64 })
+            }
+        },
+    }
 }
 
 fn print_bytes<T: Read+Seek>(mut file: T, num_bytes: &TakeValue, total_bytes: i64) -> MyResult<()> {
