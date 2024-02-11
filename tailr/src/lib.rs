@@ -1,4 +1,4 @@
-use std::{error::Error, fs::File, io::{BufRead, BufReader, Read, Seek}};
+use std::{error::Error, fs::File, io::{BufRead, BufReader, Read, Seek, SeekFrom}};
 
 use clap::{App, Arg};
 use once_cell::sync::OnceCell;
@@ -39,12 +39,22 @@ pub fn get_args() -> MyResult<Config> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    for filename in config.files.iter() {
+    let num_files = config.files.len();
+    for (file_num, filename) in config.files.iter().enumerate() {
         match File::open(filename) {
             Ok(file) => {
+                if !config.quiet && num_files > 1 {
+                    println!("{}==> {} <==", if file_num>0 {"\n"} else {""}, filename);
+                }
+
                 let (total_lines, total_bytes) = count_lines_bytes(filename)?;
                 let file = BufReader::new(file);
-                print_lines(file, &config.lines, total_lines)?;
+                if let Some(num_bytes) = &config.bytes {
+                    print_bytes(file, num_bytes, total_bytes)?;
+                }  else {
+                    print_lines(file, &config.lines, total_lines)?;
+                }
+                
             },
             Err(e) => eprintln!("{}: {}", filename, e),
         }
@@ -129,7 +139,15 @@ fn get_start_index(take_val: &TakeValue, total: i64) -> Option<u64> {
 }
 
 fn print_bytes<T: Read+Seek>(mut file: T, num_bytes: &TakeValue, total_bytes: i64) -> MyResult<()> {
-    unimplemented!()
+    if let Some(start) = get_start_index(num_bytes, total_bytes) {
+        file.seek(SeekFrom::Start(start))?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        if !buffer.is_empty() {
+            print!("{}", String::from_utf8_lossy(&buffer));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
