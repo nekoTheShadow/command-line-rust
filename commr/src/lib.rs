@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, fs::File, io::{stdin, BufRead, BufReader}};
 
 use clap::{App, Arg};
 
@@ -17,7 +17,14 @@ pub struct Config {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:#?}", config);
+    let file1 = &config.file1;
+    let file2 = &config.file2;
+    if file1=="-" && file2=="-" {
+        return Err(From::from("Both input files cannot be STDIN (\"-\")"))
+    }
+    let _file1 = open(file1)?;
+    let _file2 = open(file2)?;
+    println!("Open {} and {}", file1, file2);
     Ok(())
 }
 
@@ -43,4 +50,11 @@ pub fn get_args() -> MyResult<Config> {
         insensitive: matches.is_present("insensitive"),
         delimiter: matches.value_of("delimiter").unwrap().to_string(),
     })
+}
+
+fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
+    match filename {
+        "-" => Ok(Box::new(BufReader::new(stdin()))),
+        _ => Ok(Box::new(BufReader::new(File::open(filename).map_err(|e| format!("{}: {}", filename, e))?)))
+    }
 }
