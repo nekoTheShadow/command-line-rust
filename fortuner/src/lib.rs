@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, path::PathBuf};
 
 use clap::{App, Arg};
 use regex::{Regex, RegexBuilder};
@@ -30,7 +30,8 @@ pub fn get_args() -> MyResult<Config> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:#?}", config);
+    let files = find_files(&config.sources);
+    println!("{:#?}", files);
     Ok(())
 }
 
@@ -38,9 +39,13 @@ fn parse_u64(val: &str) -> MyResult<u64> {
     val.parse().map_err(|_| format!("\"{}\" not a  valid integer", val).into())
 }
 
+fn find_files(paths: &[String]) -> MyResult<Vec<PathBuf>> {
+    unimplemented!()
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::parse_u64;
+    use crate::{find_files, parse_u64};
 
     #[test]
     fn test_parse_u64() {
@@ -56,4 +61,41 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), 4);
     }
+
+    #[test]
+    fn test_find_files() {
+        let res = find_files(&["./tests/inputs/jokes".to_string()]);
+        assert!(res.is_ok());
+        let files = res.unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files.get(0).unwrap().to_string_lossy(), "./tests/inputs/jokes");
+
+        let res = find_files(&["/path/does/not/exist".to_string()]);
+        assert!(res.is_err());
+
+        let res = find_files(&["./tests/inputs".to_string()]);
+        assert!(res.is_ok());
+        let files = res.unwrap();
+        assert_eq!(files.len(), 5);
+        let first = files.get(0).unwrap().display().to_string();
+        assert!(first.contains("ascii-art"));
+        let last = files.last().unwrap().display().to_string();
+        assert!(last.contains("quotes"));
+
+        let res = find_files(&[
+            "./tests/inputs/jokes".to_string(),
+            "./tests/inputs/ascii-art".to_string(),
+            "./tests/inputs/jokes".to_string(),
+        ]);
+        assert!(res.is_ok());
+        let files = res.unwrap();
+        assert_eq!(files.len(), 2);
+        if let Some(filename) = files.first().unwrap().file_name() {
+            assert_eq!(filename.to_string_lossy(), "ascii-art".to_string())
+        }
+        if let Some(filename) = files.last().unwrap().file_name() {
+            assert_eq!(filename.to_string_lossy(), "jokes".to_string())
+        }
+    }
+
 }
