@@ -1,4 +1,4 @@
-use std::{error::Error, fs::File};
+use std::{error::Error, fs::File, io::BufRead};
 
 use clap::{App, Arg};
 use once_cell::sync::OnceCell;
@@ -75,9 +75,17 @@ fn count_lines_bytes(filename: &str) -> MyResult<(i64, i64)> {
     unimplemented!()
 }
 
+fn print_lines(mut file: impl BufRead, num_lines: &TakeValue, total_lines: i64) -> MyResult<()> {
+    unimplemented!()
+}
+
+fn get_start_index(tak_val: &TakeValue, total: i64) -> Option<u64> {
+    unimplemented!()
+}
 
 #[cfg(test)]
 mod tests {
+    use crate::get_start_index;
     use crate::parse_num;
     use crate::count_lines_bytes;
     use crate::TakeValue::*;
@@ -139,5 +147,24 @@ mod tests {
         let res = count_lines_bytes("tests/inputs/ten.txt");
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), (10, 49));
+    }
+
+    #[test]
+    fn test_get_start_index() {
+        assert_eq!(get_start_index(&PlusZero, 0), None);
+        assert_eq!(get_start_index(&PlusZero, 1), Some(0));
+        assert_eq!(get_start_index(&TakeNum(0), 1), None);
+        assert_eq!(get_start_index(&TakeNum(1), 0), None);
+        assert_eq!(get_start_index(&TakeNum(2), 1), None);
+
+        assert_eq!(get_start_index(&TakeNum(1), 10), Some(0));
+        assert_eq!(get_start_index(&TakeNum(2), 10), Some(1));
+        assert_eq!(get_start_index(&TakeNum(3), 10), Some(2));
+
+        assert_eq!(get_start_index(&TakeNum(-1), 10), Some(9));
+        assert_eq!(get_start_index(&TakeNum(-2), 10), Some(8));
+        assert_eq!(get_start_index(&TakeNum(-3), 10), Some(7));
+
+        assert_eq!(get_start_index(&TakeNum(-20), 10), Some(0));
     }
 }
