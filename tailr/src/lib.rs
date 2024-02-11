@@ -1,4 +1,4 @@
-use std::{error::Error, fs::File, io::BufRead};
+use std::{error::Error, fs::File, io::{BufRead, BufReader, Read, Seek}};
 
 use clap::{App, Arg};
 use once_cell::sync::OnceCell;
@@ -72,7 +72,20 @@ fn parse_num(val: &str) -> MyResult<TakeValue> {
 }
 
 fn count_lines_bytes(filename: &str) -> MyResult<(i64, i64)> {
-    unimplemented!()
+    let mut file = BufReader::new(File::open(filename)?);
+    let mut num_lines = 0;
+    let mut num_bytes = 0;
+    let mut buf = Vec::new();
+    loop {
+        let bytes_read = file.read_until(b'\n', &mut buf)?;
+        if bytes_read==0 {
+            break;
+        }
+        num_lines += 1;
+        num_bytes += bytes_read as i64;
+        buf.clear();
+    }
+    Ok((num_lines, num_bytes))
 }
 
 fn print_lines(mut file: impl BufRead, num_lines: &TakeValue, total_lines: i64) -> MyResult<()> {
@@ -80,6 +93,10 @@ fn print_lines(mut file: impl BufRead, num_lines: &TakeValue, total_lines: i64) 
 }
 
 fn get_start_index(tak_val: &TakeValue, total: i64) -> Option<u64> {
+    unimplemented!()
+}
+
+fn print_bytes<T: Read+Seek>(mut file: T, num_bytes: &TakeValue, total_bytes: i64) -> MyResult<()> {
     unimplemented!()
 }
 
