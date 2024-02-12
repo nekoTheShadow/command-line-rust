@@ -1,7 +1,9 @@
 use std::{error::Error, str::FromStr};
 
+use ansi_term::Style;
 use chrono::{Datelike, Local, NaiveDate};
 use clap::{App, Arg};
+use itertools::izip;
 
 
 #[derive(Debug)]
@@ -25,6 +27,7 @@ const MONTH_NAMES: [&str; 12] = [
     "November",
     "December",
 ];
+const LINE_WIDTH: usize = 22;
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -56,7 +59,28 @@ pub fn get_args() -> MyResult<Config> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:?}", config);
+    match config.month {
+        Some(month) => {
+            let lines = format_month(config.year, month, true, config.today);
+            println!("{}", lines.join("\n"));
+        },
+        None => {
+            println!("{:>32}", config.year);
+            let months = (1..=12).into_iter().map(|month| format_month(config.year, month, false, config.today)).collect::<Vec<_>>();
+            for (i, chunk) in months.chunks(3).enumerate() {
+                if let [m1, m2, m3] = chunk {
+                    for lines in izip!(m1, m2, m3) {
+                        println!("{}{}{}", lines.0, lines.1, lines.2);
+                    }
+                    if i<3 {
+                        println!();
+                    }
+                }
+            }
+        }
+    }
+
+
     Ok(())
 }
 
@@ -102,11 +126,38 @@ fn parse_month(month: &str) -> MyResult<u32> {
 }
 
 fn format_month(year: i32, month: u32, print_year: bool, today: NaiveDate) -> Vec<String> {
-    unimplemented!()
+    let is_today = |day: u32| {
+        year==today.year() && month==today.month() && day==today.day()
+    };
+    
+    let first = NaiveDate::from_ymd(year, month, 1);
+    let mut days = (1..first.weekday().number_from_sunday()).into_iter().map(|_| "  ".to_string()).collect::<Vec<String>>();
+    let last = last_day_in_month(year, month);
+    days.extend((first.day()..=last.day()).into_iter().map(|num| {
+        let fmt = format!("{:>2}", num);
+        if is_today(num) {
+            Style::new().reverse().paint(fmt).to_string()
+        } else {
+            fmt
+        }
+    }));
+
+    let month_name = MONTH_NAMES[month as usize - 1];
+    let mut lines = Vec::with_capacity(8);
+    lines.push(format!("{:^20}  ", if print_year { format!("{} {}", month_name, year) } else { month_name.to_string() }));
+    lines.push("Su Mo Tu We Th Fr Sa  ".to_string()); 
+    for week in days.chunks(7) {
+        lines.push(format!("{:width$}  ", week.join(" "), width=LINE_WIDTH-2));
+    }
+    while lines.len() < 8 {
+        lines.push(" ".repeat(LINE_WIDTH))
+    }
+    lines
 }
 
 fn last_day_in_month(year: i32, month: u32) -> NaiveDate {
-    unimplemented!()
+    let (y, m) = if month==12 {(year+1, 1)} else {(year, month+1)};
+    NaiveDate::from_ymd(y, m, 1).pred()
 }
 
 #[cfg(test)]
