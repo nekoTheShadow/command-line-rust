@@ -1,7 +1,12 @@
-use std::{error::Error, path::PathBuf};
+mod owner;
 
+use std::{error::Error, fs, os::unix::fs::MetadataExt, path::PathBuf};
+
+use chrono::{DateTime, Local};
 use clap::{App, Arg};
+use owner::Owner;
 use tabular::{Row, Table};
+use users::{get_group_by_gid, get_user_by_uid};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -30,32 +35,92 @@ pub fn get_args() -> MyResult<Config> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:?}", config);
+    let paths = find_files(&config.paths, config.show_hidden)?;
+    if config.long {
+        println!("{}", format_output(&paths)?);
+    } else {
+        for path in paths {
+            println!("{}", path.display());
+        }
+    }
     Ok(())
 }
 
 fn find_files(paths: &[String], show_hidden: bool) -> MyResult<Vec<PathBuf>> {
-    unimplemented!()
+    let mut results = vec![];
+    for name in paths {
+        match fs::metadata(name) {
+            Err(e) => eprintln!("{}: {}", name, e),
+            Ok(meta) => {
+                if meta.is_dir() {
+                    for entry in fs::read_dir(name)? {
+                        let entry = entry?;
+                        let path = entry.path();
+                        let is_hidden = path.file_name().map_or(false, |file_name| file_name.to_string_lossy().starts_with("."));
+                        if !is_hidden || show_hidden {
+                            results.push(entry.path());
+                        }
+                    }
+                } else {
+                    results.push(PathBuf::from(name));
+                }
+            }
+        }
+    }
+    Ok(results)
 }
 
 fn format_output(paths: &[PathBuf]) -> MyResult<String> {
     let fmt = "{:<}{:<}  {:>}  {:<}  {:<}  {:>}  {:<}  {:<}";
     let mut table = Table::new(fmt);
     for path in paths {
-        table.add_row(Row::new().with_cell("").with_cell("").with_cell("").with_cell("").with_cell("").with_cell("").with_cell("").with_cell(""));
+        let metadata = path.metadata()?;
+        
+        let uid = metadata.uid();
+        let user = get_user_by_uid(uid).map(|u| u.name().to_string_lossy().into_owned()).unwrap_or_else(|| uid.to_string());
+        
+        let gid = metadata.gid();
+        let group = get_group_by_gid(gid).map(|g| g.name().to_string_lossy().into_owned()).unwrap_or_else(|| gid.to_string());
+
+        let file_type = if path.is_dir() { "d" } else { "-" };
+        let perms = format_mode(metadata.mode());
+        let modified = DateTime::<Local>::from(metadata.modified()?);
+
+        table.add_row(Row::new()
+            .with_cell(file_type)
+            .with_cell(perms)
+            .with_cell(metadata.nlink())
+            .with_cell(user)
+            .with_cell(group)
+            .with_cell(metadata.len())
+            .with_cell(modified.format("%b %d %y %H:%M"))
+            .with_cell(path.display()));
     }
-    unimplemented!()
+    Ok(format!("{}", table))
 }
 
 fn format_mode(mode: u32) -> String {
-    unimplemented!()
+    format!("{}{}{}",
+        mk_triple(mode, Owner::User),
+        mk_triple(mode, Owner::Group),
+        mk_triple(mode, Owner::Other),
+    )
+}
+
+fn mk_triple(mode: u32, owner: Owner) -> String {
+    let [read, write, execute] = owner.masks();
+    format!("{}{}{}",
+        if mode & read    == 0 {"-"} else {"r"},
+        if mode & write   == 0 {"-"} else {"w"},
+        if mode & execute == 0 {"-"} else {"x"},
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{find_files, format_mode, format_output};
+    use crate::{find_files, format_mode, format_output, mk_triple, owner::Owner};
 
     #[test]
     fn test_find_files() {
@@ -141,4 +206,11 @@ mod tests {
         long_match(&dir_line, "tests/inputs/dir", "drwxr-xr-x", None);
     }
 
+    #[test]
+    fn test_mk_triple() {
+        assert_eq!(mk_triple(0o751, Owner::User),  "rwx");
+        assert_eq!(mk_triple(0o751, Owner::Group), "r-x");
+        assert_eq!(mk_triple(0o751, Owner::Other), "--x");
+        assert_eq!(mk_triple(0o600, Owner::Other), "---");
+    }
 }
