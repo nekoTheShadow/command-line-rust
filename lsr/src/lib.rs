@@ -47,9 +47,13 @@ fn format_output(paths: &[PathBuf]) -> MyResult<String> {
     unimplemented!()
 }
 
+fn format_mode(mode: u32) -> String {
+    unimplemented!()
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::find_files;
+    use crate::{find_files, format_mode};
 
     #[test]
     fn test_find_files() {
@@ -78,5 +82,11 @@ mod tests {
         let mut filenames = res.unwrap().iter().map(|entry| entry.display().to_string()).collect::<Vec<_>>();
         filenames.sort();
         assert_eq!(filenames, ["tests/inputs/.hidden", "tests/inputs/bustle.txt", "tests/inputs/dir", "tests/inputs/empty.txt", "tests/inputs/fox.txt"]);
+    }
+
+    #[test]
+    fn test_format_mode() {
+        assert_eq!(format_mode(0o755), "rwxr-xr-x");
+        assert_eq!(format_mode(0o421), "r---w---x");
     }
 }
