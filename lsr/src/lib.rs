@@ -53,7 +53,9 @@ fn format_mode(mode: u32) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{find_files, format_mode};
+    use std::path::PathBuf;
+
+    use crate::{find_files, format_mode, format_output};
 
     #[test]
     fn test_find_files() {
@@ -89,4 +91,54 @@ mod tests {
         assert_eq!(format_mode(0o755), "rwxr-xr-x");
         assert_eq!(format_mode(0o421), "r---w---x");
     }
+
+    fn long_match(line: &str, expected_name: &str, expected_perms: &str, expected_size: Option<&str>) {
+        let parts = line.split_whitespace().collect::<Vec<_>>();
+        assert!(parts.len() > 0 && parts.len() <= 10);
+
+        let perms = parts.get(0).unwrap();
+        assert_eq!(perms, &expected_perms);
+
+        if let Some(size) = expected_size {
+            let file_size = parts.get(4).unwrap();
+            assert_eq!(file_size, &size);
+        }
+
+        let display_name = parts.last().unwrap();
+        assert_eq!(display_name, &expected_name)
+    }
+
+    #[test]
+    fn test_format_output_one() {
+        let bustle_path = "tests/inputs/bustle.txt";
+        let bustle = PathBuf::from(bustle_path);
+
+        let res = format_output(&[bustle]);
+        assert!(res.is_ok());
+
+        let out = res.unwrap();
+        let lines = out.split("\n").filter(|s| !s.is_empty()).collect::<Vec<_>>();
+        assert_eq!(lines.len(), 1);
+
+        let line1 = lines.first().unwrap();
+        long_match(&line1, bustle_path, "-rw-r--r--", Some("193"));
+    }
+
+    #[test]
+    fn test_format_output_two() {
+        let res = format_output(&[PathBuf::from("tests/inputs/dir"), PathBuf::from("tests/inputs/empty.txt")]);
+        assert!(res.is_ok());
+
+        let out = res.unwrap();
+        let mut lines = out.split("\n").filter(|s| !s.is_empty()).collect::<Vec<_>>();
+        lines.sort();
+        assert_eq!(lines.len(), 2);
+
+        let empty_line = lines.remove(0);
+        long_match(&empty_line, "tests/inputs/empty.txt", "-rw-r--r--", Some("0"));
+
+        let dir_line = lines.remove(0);
+        long_match(&dir_line, "tests/inputs/dir", "drwxr-xr-x", None);
+    }
+
 }
