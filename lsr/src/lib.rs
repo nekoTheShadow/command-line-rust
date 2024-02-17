@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, path::PathBuf};
 
 use clap::{App, Arg};
 
@@ -31,4 +31,42 @@ pub fn get_args() -> MyResult<Config> {
 pub fn run(config: Config) -> MyResult<()> {
     println!("{:?}", config);
     Ok(())
+}
+
+fn find_files(paths: &[String], show_hidden: bool) -> MyResult<Vec<PathBuf>> {
+    unimplemented!()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::find_files;
+
+    #[test]
+    fn test_find_files() {
+        let res = find_files(&["tests/inputs".to_string()], false);
+        assert!(res.is_ok());
+        let mut filenames = res.unwrap().iter().map(|entry| entry.display().to_string()).collect::<Vec<_>>();
+        filenames.sort();
+        assert_eq!(filenames, ["tests/inputs/bustle.txt", "tests/inputs/dir", "tests/inputs/empty.txt", "tests/inputs/fox.txt"]);
+
+        let res = find_files(&["tests/inputs/.hidden".to_string()], false);
+        assert!(res.is_ok());
+        let filenames = res.unwrap().iter().map(|entry| entry.display().to_string()).collect::<Vec<_>>();
+        assert_eq!(filenames, ["tests/inputs/.hidden"]);
+
+        let res = find_files(&["tests/inputs/bustle.txt".to_string(), "tests/inputs/dir".to_string()], false);
+        assert!(res.is_ok());
+        let mut filenames = res.unwrap().iter().map(|entry| entry.display().to_string()).collect::<Vec<_>>();
+        filenames.sort();
+        assert_eq!(filenames, ["tests/inputs/bustle.txt", "tests/inputs/dir/spiders.txt"]);
+    }
+
+    #[test]
+    fn test_find_files_hidden() {
+        let res = find_files(&["tests/inputs".to_string()], true);
+        assert!(res.is_ok());
+        let mut filenames = res.unwrap().iter().map(|entry| entry.display().to_string()).collect::<Vec<_>>();
+        filenames.sort();
+        assert_eq!(filenames, ["tests/inputs/.hidden", "tests/inputs/bustle.txt", "tests/inputs/dir", "tests/inputs/empty.txt", "tests/inputs/fox.txt"]);
+    }
 }
